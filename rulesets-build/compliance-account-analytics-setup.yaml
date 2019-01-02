@@ -67,52 +67,163 @@ Conditions:
   AccountList: !Not [ !Equals [!Ref AccountList, "none"]]
 
 Resources:
-  AthenaNamedQueryInitDB:
-    Type: AWS::Athena::NamedQuery
+  GlueDatabaseComplianceAsCode:
+    Type: AWS::Glue::Database
     Properties:
-      Database: "default"
-      Description: "(To be run 1st) A query to build database for advanced analytics"
-      Name: "1-Database For ComplianceAsCode"
-      QueryString: "CREATE DATABASE IF NOT EXISTS complianceascode"
-      
-  AthenaNamedQueryInitTable:
-    Type: AWS::Athena::NamedQuery
-    Properties:
-      Database: "complianceascode"
-      Description: "(To be run 2nd) A query to build table for advanced analytics"
-      Name: "2-Table For ComplianceAsCode"
-      QueryString: !Join 
-        - ""
-        - - CREATE EXTERNAL TABLE IF NOT EXISTS complianceascode.events (
-          - !Ref ColumnKeyList
-          - ") ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe' WITH SERDEPROPERTIES ('paths'='"
-          - !Ref KeyListGeneratedByFirehose
-          - "') STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat' OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat' LOCATION 's3://"
-          - !Join [ "-", [ !Ref CentralizedS3BucketComplianceEventName, !Ref 'AWS::AccountId']]
-          - /
-          - !Ref FolderWhereFireHoseIsSending
-          - "/' TBLPROPERTIES ('classification'='json', 'compressionType'='gzip', 'transient_lastDdlTime'='1521161215', 'typeOfData'='file')"
- 
-  AthenaNamedQueryConfigTable:
-    Type: AWS::Athena::NamedQuery
-    Properties:
-      Database: "complianceascode"
-      Description: "(To be run 3rd) A query to build table for query config"
-      Name: "3-Table For Config in ComplianceAsCode"
-      QueryString: !Join 
-        - ""
-        - - "CREATE EXTERNAL TABLE IF NOT EXISTS complianceascode.config (fileVersion string, configSnapshotId string, configurationItems array<struct<relatedEvents:string, relationships:string, configuration:string, supplementaryConfiguration:string, tags:string, configurationItemVersion:string, configurationItemCaptureTime:string, configurationStateId:string, awsAccountId:string, configurationItemStatus:string, resourceType:string, resourceId:string, resourceName:string, ARN:string, awsRegion:string, availabilityZone:string, configurationStateMd5Hash:string, resourceCreationTime:string>>) ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe' WITH SERDEPROPERTIES ('serialization.format' = '1') LOCATION 's3://"
-          - !Join [ "-", [ !Ref CentralizedS3BucketConfig, !Ref 'AWS::AccountId']]
-          - "/'"
+      DatabaseInput:
+        Name: complianceascode
+      CatalogId: !Ref 'AWS::AccountId'
 
-  AccountListTable:
-    Type: AWS::Athena::NamedQuery
+  GlueTableConfigEvents:
+    Type: AWS::Glue::Table
     Properties:
-      Database: "complianceascode"
-      Description: "(To be run 4th) A query to build table for listing all the accounts"
-      Name: "4-Table For AccountList"
-      QueryString: !Join 
-        - ""
-        - - "CREATE EXTERNAL TABLE IF NOT EXISTS complianceascode.accountlist (accountname string, accountid string, owneremails string, tag1 string, tag2 string ) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' WITH SERDEPROPERTIES ('separatorChar'=',') STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat' OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat' LOCATION 's3://"
-          - !Ref LocationAccountListCSV
-          - "/csv'"
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabaseComplianceAsCode
+      TableInput:
+        Name: events
+        Owner: hadoop
+        Parameters: {
+           "EXTERNAL": "TRUE",
+           "classification": "json",
+           "compressionType": "gzip",
+           "transient_lastDdlTime": "1521161215",
+           "typeOfData": "file"
+        }
+        PartitionKeys:
+        - !Ref 'AWS::NoValue'
+        StorageDescriptor:
+          NumberOfBuckets: "-1"
+          BucketColumns:
+            - !Ref 'AWS::NoValue'
+          Parameters: {}
+          SkewedInfo:
+            SkewedColumnNames: []
+            SkewedColumnValues: []
+            SkewedColumnValueLocationMaps: {}
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          Columns:
+          - Name: configrulearn
+            Type: string
+          - Name: enginerecordedtime
+            Type: string
+          - Name: configrulename
+            Type: string
+          - Name: resourcetype
+            Type: string
+          - Name: resourceid
+            Type: string
+          - Name: resultrecordedtime
+            Type: string
+          - Name: configruleinvokedtime
+            Type: string
+          - Name: accountid
+            Type: string
+          - Name: awsregion
+            Type: string
+          - Name: annotation
+            Type: string
+          - Name: compliancetype
+            Type: string
+          - Name: whitelistedcompliancetype
+            Type: string
+          - Name: availability
+            Type: string
+          - Name: baseline
+            Type: string
+          - Name: confidentiality
+            Type: string
+          - Name: otherregionsbaseline
+            Type: string
+          - Name: pci
+            Type: string
+          - Name: rulecriticity
+            Type: string
+          Location: !Join ["", ["s3://", !Ref CentralizedS3BucketComplianceEventName, "-", !Ref "AWS::AccountId", "/", !Ref FolderWhereFireHoseIsSending, "/"]]
+          SerdeInfo:
+            Parameters:
+              paths: "ConfigRuleArn,EngineRecordedTime,ConfigRuleName,ResourceType,ResourceId,ResultRecordedTime,ConfigRuleInvokedTime,AccountId,AwsRegion,Annotation,ComplianceType,WhitelistedComplianceType,availability,baseline,confidentiality,otherregionsbaseline,pci,rulecriticity"
+              serialization.format: "1"
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+        TableType: EXTERNAL_TABLE
+
+  GlueTableConfig:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabaseComplianceAsCode
+      TableInput:
+        Name: config
+        Owner: hadoop
+        Parameters: {
+          "EXTERNAL": "TRUE"
+        }
+        PartitionKeys:
+        - !Ref 'AWS::NoValue'
+        StorageDescriptor:
+          NumberOfBuckets: "-1"
+          BucketColumns:
+            - !Ref 'AWS::NoValue'
+          Parameters: {}
+          SkewedInfo:
+            SkewedColumnNames: []
+            SkewedColumnValues: []
+            SkewedColumnValueLocationMaps: {}
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"
+          Columns:
+          - Name: fileversion
+            Type: string
+          - Name: configsnapshotid
+            Type: string
+          - Name: configurationitems
+            Type: "array<struct<relatedEvents:string,relationships:string,configuration:string,supplementaryConfiguration:string,tags:string,configurationItemVersion:string,configurationItemCaptureTime:string,configurationStateId:string,awsAccountId:string,configurationItemStatus:string,resourceType:string,resourceId:string,resourceName:string,ARN:string,awsRegion:string,availabilityZone:string,configurationStateMd5Hash:string,resourceCreationTime:string>>"
+          Location: !Join [ "", [ "s3://", !Ref CentralizedS3BucketConfig, "-", !Ref 'AWS::AccountId', "/"]]
+          SerdeInfo:
+            Parameters:
+              serialization.format: "1"
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+        TableType: EXTERNAL_TABLE
+
+  GlueTableConfigAccoountList:
+      Type: AWS::Glue::Table
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseName: !Ref GlueDatabaseComplianceAsCode
+        TableInput:
+          Name: accountlist
+          Owner: hadoop
+          Parameters: {
+            "EXTERNAL": "TRUE"
+          }
+          PartitionKeys:
+          - !Ref 'AWS::NoValue'
+          StorageDescriptor:
+            NumberOfBuckets: "-1"
+            BucketColumns:
+              - !Ref 'AWS::NoValue'
+            Parameters: {}
+            SkewedInfo:
+              SkewedColumnNames: []
+              SkewedColumnValues: []
+              SkewedColumnValueLocationMaps: {}
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            Columns:
+            - Name: accountname
+              Type: string
+            - Name: accountid
+              Type: string
+            - Name: owneremails
+              Type: string
+            - Name: tag1
+              Type: string
+            - Name: tag2
+              Type: string
+            Location: !Join ["", ["s3://", !Ref LocationAccountListCSV, "/csv"]]
+            SerdeInfo:
+              Parameters:
+                separatorChar: ","
+                serialization.format: "1"
+              SerializationLibrary: org.apache.hadoop.hive.serde2.OpenCSVSerde
+          TableType: EXTERNAL_TABLE
