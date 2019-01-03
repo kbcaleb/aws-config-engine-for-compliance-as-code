@@ -481,7 +481,8 @@ Resources:
               Resource: arn:aws:iam::*:role/rdk/*
             - Sid: AthenaCreation
               Action:
-              - athena:*NamedQuery
+              - glue:CreateDatabase
+              - glue:CreateTable
               Effect: Allow
               Resource: "*" 
 
